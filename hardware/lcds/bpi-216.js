@@ -5,12 +5,23 @@ var PARITY = 'none';
 var DATA_BITS = 8;
 var STOP_BITS = 1;
 
-// Serialport initialization
+// BPI constructor
 var BPI = function() {
     this.serialPort = {};
+    this.needsScrolling = false;
 }
 
-// The serial device
+BPI.prototype.DIRECTION = {
+    left: 'left',
+    right: 'right'
+};
+
+/**
+ * Initializes the serial device with the specified options
+ *
+ * @param {object} Object with the configuration options for the device
+ *                 { location, baudRate }
+ */
 BPI.prototype.initSerial = function(options) {
     var options = options || {};
     var deviceLocation = options.location || '/dev/ttyAMA0';
@@ -26,14 +37,14 @@ BPI.prototype.initSerial = function(options) {
         }
     );
     this.serialPort.on('open', (function () {
-        console.log('port open. Clearing the port');
+        console.log('Port open. Clearing the port');
         this.clear();
     }).bind(this));
     this.serialPort.on('close', function () {
-        console.log('port closing.');
+        console.log('Port closing.');
     });
     this.serialPort.on('data', function (data) {
-        console.log('sending data: ' + data);
+        console.log('Sending data: ' + data);
     });
 }
 
@@ -72,6 +83,21 @@ BPI.prototype.move = function(position) {
  */
 BPI.prototype.close = function() {
     this.serialPort.close();
+}
+
+/**
+ * Scroll the text on both lines (BPI-216 limitation) in the directino given
+ *
+ * @param {string} The direction to scroll the text
+ */
+BPI.prototype.scrollText = function(direction) {
+    if (direction === this.DIRECTION.left) {
+        this.serialPort.write([0xFE, 0x18]);
+    } else if (direction === this.DIRECTION.right) {
+        this.serialPort.write([0xFE, 0x1C]);
+    } else {
+        console.log('Unrecognized direction');
+    }
 }
 
 // Export the serial class
