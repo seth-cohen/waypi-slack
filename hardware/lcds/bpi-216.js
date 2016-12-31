@@ -1,19 +1,30 @@
 var SerialPort = require('serialport');
 var sleep = require('sleep');
 
+// Private constants
 var PARITY = 'none';
 var DATA_BITS = 8;
 var STOP_BITS = 1;
 
-// BPI constructor
-var BPI = function() {
-    this.serialPort = {};
-    this.needsScrolling = false;
-}
+// Exported Constants
+var DIRECTIONS = {
+    LEFT:  'left',
+    RIGHT: 'right'
+};
 
-BPI.prototype.DIRECTION = {
-    left: 'left',
-    right: 'right'
+// BPI constructor
+function BPI() {
+    this.serialPort = {};
+    this.currentScreenOffset = 0;
+    this.maxLineCharCount = 0;
+};
+
+// LCD Screen details
+var screen = {
+    maxLineLength:        40,
+    maxVisibleLineLength: 16,
+    maxScreenOffset:      24,
+    numLines:             2
 };
 
 /**
@@ -23,7 +34,7 @@ BPI.prototype.DIRECTION = {
  *                 { location, baudRate }
  */
 BPI.prototype.initSerial = function(options) {
-    var options = options || {};
+    options = options || {};
     var deviceLocation = options.location || '/dev/ttyAMA0';
     var baudRate = options.baudRate || 9600;
 
@@ -32,7 +43,7 @@ BPI.prototype.initSerial = function(options) {
         {
             baudRate: baudRate,
             dataBits: DATA_BITS,
-            parity: PARITY,
+            parity:   PARITY,
             stopBits: STOP_BITS
         }
     );
@@ -43,47 +54,54 @@ BPI.prototype.initSerial = function(options) {
     this.serialPort.on('close', function () {
         console.log('Port closing.');
     });
-    this.serialPort.on('data', function (data) {
-        console.log('Sending data: ' + data);
-    });
-}
+};
 
 /**
  * Sends the command to clear the screen. We need to wait 1ms before sending any further instructions
  */
 BPI.prototype.clear = function() {
     // For some reason these instructions need to be sent as hex arrays?
-    this.serialPort.write([0xFE]);
-    this.serialPort.write([0x01]);
+    this.serialPort.write([0xFE, 0x01]);
     sleep.usleep(1000);
-}
+};
 
 /**
  * Write data to the screen
  *
- * @param string The text to write to the string
+ * @param {(string|array|buffer)} The text to write to the string
  */
 BPI.prototype.write = function(text) {
     this.serialPort.write(text);
-}
+};
 
 /**
  * Move to position. Note, it is possible that this needs to be passed in as hex valuei
  *
- * @param number position The position on the screen to move the cursor to
+ * @param {number} row      The row to move the cursor to (1 or 2)
+ * @param {number} position The position within the row to move the cursor to (1 - 16)
  */
-BPI.prototype.move = function(position) {
-    this.serialPort.write([0xFE]);
-    this.serialPort.write([position]);
+BPI.prototype.moveTo = function(row, position) {
+    var cursorPos = row  == 1 ? 0x80 : 0xC0;
+    cursorPos = cursorPos + (position - 1); 
+    this.serialPort.write([0xFE, cursorPos]);
     sleep.usleep(1000);
-}
+};
+
+/**
+ * Bring the window screen position back to home. Scrolls window until currentScreenOffset is 0
+ */
+BPI.prototype.bringScreenHome = function() {
+    while (this.currentScreenOffset > 0) {
+        this.scrollText(DIRECTIONS.RIGHT);
+    }
+};
 
 /**
  * Close the serial connection
  */
 BPI.prototype.close = function() {
     this.serialPort.close();
-}
+};
 
 /**
  * Scroll the text on both lines (BPI-216 limitation) in the directino given
@@ -91,14 +109,21 @@ BPI.prototype.close = function() {
  * @param {string} The direction to scroll the text
  */
 BPI.prototype.scrollText = function(direction) {
-    if (direction === this.DIRECTION.left) {
-        this.serialPort.write([0xFE, 0x18]);
-    } else if (direction === this.DIRECTION.right) {
-        this.serialPort.write([0xFE, 0x1C]);
+    if (direction === DIRECTIONS.LEFT) {
+        if (this.currentScreenOffset < screen.maxScreenOffset) {
+            this.serialPort.write([0xFE, 0x18]);
+            this.currentScreenOffset++;
+        }
+    } else if (direction === DIRECTIONS.RIGHT) {
+        if (this.currentScreenOffset > 0) {
+            this.serialPort.write([0xFE, 0x1C]);
+            this.currentScreenOffset--;
+        }
     } else {
-        console.log('Unrecognized direction');
+        console.log('Unrecognized direction', direction);
     }
-}
+};
 
 // Export the serial class
-module.exports = BPI;
+module.exports.BPI = BPI;
+module.exports.DIRECTIONS = DIRECTIONS;

@@ -12,7 +12,6 @@ function parseMessageText(message) {
 
     var regExp = /(deploy_.*) ((has been rolled back)|(has been deployed to production))/;
     var matches = message.match(regExp);
-    console.log(matches);
 
     var matchLines = [];
     if (matches) {

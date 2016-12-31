@@ -11,7 +11,7 @@ var sethbot = require('./sethbot');
 
 // Slack Credentials
 var clientId = config.slack.clientId;
-var clientSecret = config.slack.clientSecret; 
+var clientSecret = config.slack.clientSecret;
 var botToken = config.slack.bot.token;
 
 // App configuration - Slack requires that the endpoints that it hits for its webhooks
@@ -22,14 +22,19 @@ var privateKey = fs.readFileSync(config.certs.keyFile, 'utf8');
 var certificate = fs.readFileSync(config.certs.certFile, 'utf8');
 var chain = fs.readFileSync(config.certs.chainFile, 'utf8');
 
+// The scroll worker interval
+var scrollTimeout;
+var currentScroll = 0;
+var direction = BPI.DIRECTIONS.LEFT;
+
 // Typically, we have the serial port Ground connected through some type of switch.
-// reason being is that the BPI-216 will enter test mode if connected during startup 
+// reason being is that the BPI-216 will enter test mode if connected during startup
 // Before we open the port let's connect ground
 // Instantiate a new BPI-216 object
-var bpi = new BPI();
+var bpi = new BPI.BPI();
 gpio.open(12, 'output', function() {
-    gpio.write(12, 1, function(data) {
-        console.log('setting high: ' + data);
+    gpio.write(12, 1, function() {
+        console.log('setting high');
         bpi.initSerial();
     });
 });
@@ -47,8 +52,6 @@ app.get('/', function (req, res) {
 // POST requests sent to / should echo the data and print to the serial port
 // Currently we need to support responding with the challenge from Slack
 app.post('/', function (req, res) {
-    console.log(req.body);
-    
     bpi.clear();
     bpi.write('Hello from Serial port');
     res.send(req.body.challenge);
@@ -65,9 +68,9 @@ app.get('/oauth', function(req, res) {
         // We'll do a GET call to Slack's 'oauth.access' endpoint, passing our app's client ID, client secret, and the code we just got as query
         // parameters.
         request({
-            url: config.slack.apiEndpoint + config.slack.oauth, //URL to hit
-            qs: {code: req.query.code, client_id: clientId, client_secret: clientSecret}, //Query string data
-            method: 'GET' 
+            url:    config.slack.apiEndpoint + config.slack.oauth, //URL to hit
+            qs:     {code: req.query.code, client_id: clientId, client_secret: clientSecret}, //Query string data
+            method: 'GET'
 
         }, function (error, response, body) {
             if (error) {
@@ -101,24 +104,37 @@ app.post('/hooks', function(req, res) {
                 // Parse the text to see if it is a message that we care about
                 var matchLines = sethbot.parseMessageText(event.text);
                 if (matchLines && matchLines.length >= 2) {
+                    // Cancel the scrolling interval if one is running
+                    if (scrollTimeout) {
+                        clearInterval(scrollTimeout);
+                        scrollTimeout = null;
+                        bpi.bringScreenHome();
+                    }
                     console.log('Clearing the screen');
                     bpi.clear();
-                    bpi.move(0x80);
+                    bpi.moveTo(1, 1);
                     bpi.write(matchLines[0]);
 
-                    bpi.move(0xC0);
+                    bpi.moveTo(2, 1);
                     bpi.write(matchLines[1]);
 
+                    // Get max line string length so that we can control the scroll
+                    var maxLine = Math.max(matchLines[0].length, matchLines[1].length);
+                    bpi.maxLineCharCount = maxLine;
+                    if (maxLine > 16) {
+                        // we need to scroll
+                        scrollTimeout = setInterval(scrollDevice, 500);
+                    }
                     console.log('sending message request');
                     request({
-                        url: config.slack.apiEndpoint + config.slack.postMessage, //URL to hit
+                        url:  config.slack.apiEndpoint + config.slack.postMessage, //URL to hit
                         form: {
-                            token: botToken,
-                            channel: event.channel,
-                            text: 'Check the display - echoing your message there',
+                            token:    botToken,
+                            channel:  event.channel,
+                            text:     'Check the display - echoing your message there',
                             username: 'Sethbot'
                         },
-                        method: 'POST' 
+                        method: 'POST'
                     }, function (error, response, body) {
                         if (error) {
                             console.log(error);
@@ -137,7 +153,7 @@ var credentials = {key: privateKey, cert: certificate, ca: chain};
 var httpsServer = https.createServer(credentials, app);
 httpsServer.listen(3000, function () {
     console.log('App listening on port 3000!');
-}); 
+});
 
 // Handle SIGINT so we can close resources on ctrl+c
 process.on('SIGINT', function() {
@@ -146,3 +162,24 @@ process.on('SIGINT', function() {
     bpi.close();
     process.exit();
 });
+
+
+/**
+ * Scroll the current device
+ */
+function scrollDevice() {
+    var offscreenCharCount = bpi.maxLineCharCount - 16;
+
+    if (bpi) {
+        bpi.scrollText(direction);
+        if (direction === BPI.DIRECTIONS.LEFT) {
+            if (bpi.currentScreenOffset >= offscreenCharCount) {
+                direction = BPI.DIRECTIONS.RIGHT;
+            }
+        } else {
+            if (bpi.currentScreenOffset <= 0) {
+                direction = BPI.DIRECTIONS.LEFT;
+            }
+        }
+    }
+}

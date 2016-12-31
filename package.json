@@ -5,13 +5,16 @@
   "main": "index.js",
   "dependencies": {
     "body-parser": "^1.15.2",
+    "child-process": "^1.0.2",
     "express": "^4.14.0",
     "lodash": "^4.17.3",
     "pi-gpio": "0.0.8",
     "process": "^0.11.9",
+    "q": "^1.4.1",
     "request": "^2.79.0",
     "serialport": "^4.0.7",
-    "sleep": "^5.0.0"
+    "sleep": "^5.0.0",
+    "sleep-promise": "^2.0.0"
   },
   "devDependencies": {},
   "scripts": {
