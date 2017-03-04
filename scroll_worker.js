@@ -1,5 +1,4 @@
 var BPI = require('./hardware/lcds/bpi-216.js');
-var sleep = require('sleep-promise');
 var Q = require('q');
 
 var scrolling = false;

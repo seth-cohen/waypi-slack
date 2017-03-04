@@ -17,14 +17,12 @@ var botToken = config.slack.bot.token;
 // App configuration - Slack requires that the endpoints that it hits for its webhooks
 // are served over https
 var app = express();
-console.log(config);
 var privateKey = fs.readFileSync(config.certs.keyFile, 'utf8');
 var certificate = fs.readFileSync(config.certs.certFile, 'utf8');
 var chain = fs.readFileSync(config.certs.chainFile, 'utf8');
 
 // The scroll worker interval
 var scrollTimeout;
-var currentScroll = 0;
 var direction = BPI.DIRECTIONS.LEFT;
 
 // Typically, we have the serial port Ground connected through some type of switch.
@@ -43,13 +41,13 @@ gpio.open(12, 'output', function() {
 app.use(bodyParser.urlencoded({extended: false}));
 app.use(bodyParser.json());
 
-// This endpoing is just for some browser fun.
+// This endpoint is just for some browser fun.
 app.get('/', function (req, res) {
     console.log(req.query);
     res.send('Hello World, from Pi part 3');
 });
 
-// POST requests sent to / should echo the data and print to the serial port
+// POST requests sent to '/' should echo the data and print to the serial port
 // Currently we need to support responding with the challenge from Slack
 app.post('/', function (req, res) {
     bpi.clear();
@@ -57,7 +55,7 @@ app.post('/', function (req, res) {
     res.send(req.body.challenge);
 });
 
-// This route handles get request to a /oauth endpoint. We'll use this endpoint for handling the logic of the Slack oAuth process behind our app.
+// This route handles GET request to a /oauth endpoint. We'll use this endpoint for handling the logic of the Slack oAuth process behind our app.
 app.get('/oauth', function(req, res) {
     // When a user authorizes an app, a code query parameter is passed on the oAuth endpoint. If that code is not there, we respond with an error message
     if (!req.query.code) {

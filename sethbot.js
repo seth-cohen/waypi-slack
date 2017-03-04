@@ -1,8 +1,8 @@
 var matchMap = {
     deployBranch: 1,
-    status: 2,
-    rolledBack: 3,
-    prodDeploy: 4
+    status:       2,
+    rolledBack:   3,
+    prodDeploy:   4
 };
 
 function parseMessageText(message) {
